@@ -1,2 +1,3 @@
 # autovj
-a ai-driven music video generator
+
+an ai-driven music video generator
