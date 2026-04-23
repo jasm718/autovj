@@ -1,6 +1,5 @@
-def main():
-    print("Hello from autovj!")
+from backend.main import run
 
 
 if __name__ == "__main__":
-    main()
+    run()
