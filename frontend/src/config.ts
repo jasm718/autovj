@@ -1,0 +1,3 @@
+const DEFAULT_BACKEND_WS_URL = 'ws://127.0.0.1:8000/ws'
+
+export const BACKEND_WS_URL = import.meta.env.VITE_AUTOVJ_WS_URL || DEFAULT_BACKEND_WS_URL

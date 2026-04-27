@@ -9,7 +9,7 @@ AutoVJ 是一个 AI 驱动的实时 VJ 视频生成工具。它使用 Web 界面
 ```text
 音乐播放
   -> 前端实时音乐分析
-  -> 后端 agent 生成受限 three.js 前景模块
+  -> 后端 agent 生成受限整画布视觉模块
   -> 前端 Visual Runtime 校验并挂载模块
   -> p5.js 背景层 + three.js 前景层持续渲染
 ```
@@ -20,7 +20,7 @@ MVP 不做视频导出、不做复杂资产编辑器、不允许 agent 操作页
 
 - 前端是稳定的 Visual Runtime，负责 canvas、renderer、scene、camera 和 render loop。
 - 后端 agent 只生成受限 Visual Module，不生成完整前端页面代码。
-- p5.js 作为背景层，提供稳定的音乐响应背景视觉。
+- p5.js 作为背景绘制层，由 AI 模块通过受限 API 决定画什么。
 - three.js 作为前景层，承载 AI 实时生成的 3D 视觉模块。
 - 页面不刷新，canvas 不重建，WebGLRenderer 不重建。
 - 新旧视觉模块通过 crossfade 平滑切换。
@@ -69,17 +69,114 @@ autovj/
    └─ visual-module-contract.md
 ```
 
-当前仓库已创建阶段 1 的最小骨架。部分文件仍是占位实现，后续按阶段补齐运行逻辑。
+当前仓库已完成 MVP 主链路的本地可运行实现：前端 runtime、受限 Visual Module API、模块校验/编译/回滚、Web Audio 音乐分析，以及后端 LangGraph agent 管线都已经接入。
+
+## 本地运行
+
+当前仓库支持 fresh clone 后直接启动 MVP 主链路：
+
+- 后端：FastAPI + WebSocket。
+- 前端：Vite + React + TypeScript。
+- 当前页面会挂载 p5.js 背景层和 three.js 前景层，但不会内置预设视觉元素。
+- 可以选择本地音频文件播放，也可以使用内置 demo 音频分析。
+- 页面初始化时前端会自动连接后端 WebSocket；当你开始播放或切回 Demo 音频后，前端会每 30 秒发送音乐窗口摘要，后端会生成 Visual Module Envelope 并推回前端。
+
+### 环境要求
+
+- Node.js `>=18`
+- Python `>=3.13`
+- 建议安装 `uv`
+
+如果本机 Python 不是 `3.13+`，`uv sync` 会自动下载项目所需的 Python 版本并创建 `.venv`。
+
+### 1. 安装后端依赖
+
+```bash
+uv sync
+```
+
+### 2. 安装前端依赖
+
+```bash
+cd frontend
+npm install
+```
+
+### 3. 启动后端
+
+在仓库根目录执行：
+
+```bash
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+后端健康检查：
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+期望返回：
+
+```json
+{"status":"ok"}
+```
+
+### 4. 启动前端
+
+在 `frontend/` 目录执行：
+
+```bash
+npm run dev
+```
+
+默认访问地址：
+
+```text
+http://127.0.0.1:5173/
+```
+
+如果后端 WebSocket 不在默认地址，可以通过环境变量覆盖：
+
+```bash
+VITE_AUTOVJ_WS_URL=ws://127.0.0.1:8000/ws npm run dev
+```
+
+### 5. 使用页面
+
+打开页面后前端会自动接入后端 WebSocket，并在右侧 `Backend Timeline` 中显示关键链路日志。收到有效模块后，画布内容才会开始由 AI 决定。可选操作：
+
+- 点击“选择本地音频”加载本地音频文件。
+- 点击“播放 / 暂停”控制真实 Web Audio 播放。
+- 点击“用 Demo 音频”切回内置 demo 分析。
+
+连接后端后，右侧状态会显示：
+
+```text
+backend: server_ready
+```
+
+开始播放或切回 Demo 音频后，前端会发送 `music_window`，后端返回 `visual_module`，前端校验、编译、预热成功后平滑切入新模块。
+
+### 6. 可选：接入模型 agent
+
+当前版本要求配置真实模型；如果要让 LangChain 调用外部模型，可以设置：
+
+```bash
+AUTOVJ_AGENT_MODEL=<model-name> AUTOVJ_AGENT_PROVIDER=<provider> uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+具体 provider 所需的 API key 和额外依赖取决于 LangChain 当前支持的模型供应商。后端会先校验输出；模型失败或输出不合规时，不会注入预设视觉，只会返回错误并保留当前画面。
 
 ## 渲染分层
 
 ```text
 浏览器页面
 ├─ p5.js canvas
-│  └─ 背景层：波形、粒子、流体感背景、音乐能量响应
+│  └─ 背景层：由当前 AI 模块通过受限 bg API 实时绘制
 │
 └─ three.js canvas
-   └─ 前景层：3D 模型、粒子、灯光、后处理、AI 生成模块
+   └─ 前景层：3D 几何、粒子、灯光、后处理、AI 生成模块
 ```
 
 前景 three.js canvas 使用透明背景叠加在 p5.js 背景上：
@@ -118,7 +215,7 @@ renderer.setClearColor(0x000000, 0)
   "type": "visual_module",
   "apiVersion": "1",
   "moduleId": "bass-orb-001",
-  "targetLayer": "foreground",
+  "targetLayer": "canvas",
   "duration": 30,
   "transitionSeconds": 4,
   "code": "export function createVisualModule(api) { ... }"
@@ -130,7 +227,7 @@ renderer.setClearColor(0x000000, 0)
 - `type` 必须是 `visual_module`。
 - `apiVersion` MVP 固定为 `1`。
 - `moduleId` 必须唯一。
-- `targetLayer` MVP 只允许 `foreground`。
+- `targetLayer` 当前版本固定为 `canvas`。
 - `duration` 默认 `30` 秒。
 - `transitionSeconds` 建议 `2-6` 秒。
 - `code` 只能包含一个 `createVisualModule(api)`。
@@ -143,6 +240,7 @@ AI 只能生成这种模块：
 export function createVisualModule(api) {
   return {
     init() {},
+    drawBackground(frame, bg) {},
     update(frame) {},
     dispose() {},
   }
@@ -152,6 +250,7 @@ export function createVisualModule(api) {
 生命周期约束：
 
 - `init` 只初始化模块对象。
+- `drawBackground` 只通过受限 bg API 绘制 p5 背景。
 - `update` 只更新对象状态。
 - `dispose` 只清理模块内部资源。
 - 模块不能自己启动动画循环。
@@ -415,7 +514,7 @@ receive envelope
   -> extract code
   -> parse AST
   -> reject forbidden syntax
-  -> transform export function to factory
+  -> transform export function to factory·
   -> compile module
   -> create api sandbox
   -> call createVisualModule(api)
@@ -465,6 +564,39 @@ receive envelope
 ```
 
 `moodHint` 只用于后端生成策略，不由前端直接解析。
+
+## WebSocket 消息
+
+前端发送：
+
+```json
+{
+  "type": "music_window",
+  "payload": {
+    "windowSeconds": 30,
+    "bpm": 128,
+    "energy": 0.76,
+    "bassEnergy": 0.82,
+    "midEnergy": 0.5,
+    "highEnergy": 0.63,
+    "beatDensity": 0.7,
+    "moodHint": "intense"
+  }
+}
+```
+
+后端成功返回完整 `Visual Module Envelope`，其中 `type` 为 `visual_module`。
+
+后端校验或 agent 生成失败时返回：
+
+```json
+{
+  "type": "agent_error",
+  "message": "..."
+}
+```
+
+前端收到 `agent_error` 只更新状态，不会卸载当前画面。
 
 ## 切换策略
 
@@ -537,4 +669,13 @@ nextModule 初始化到 hidden group
 
 ## 当前状态
 
-当前仓库已完成阶段 1 的基础目录和入口骨架。README 作为 MVP 技术设计基线，后续实现必须优先遵守这里定义的边界。
+当前仓库已完成阶段 1-6 的 MVP 主链路：
+
+- 阶段 1：FastAPI、Vite React、WebSocket 和基础页面已完成。
+- 阶段 2：p5.js 背景层、three.js 前景层、render loop 和 crossfade 已完成。
+- 阶段 3：Visual Module API v1、SafeObject、资源计数和生命周期已完成。
+- 阶段 4：前端 envelope 校验、AST 禁止语法检查、代码编译加载和失败回滚已完成。
+- 阶段 5：Web Audio 播放、频段能量、beat 检测和 30 秒音乐窗口摘要已完成。
+- 阶段 6：后端 prompt、LangGraph 管线、后端校验和 WebSocket 推送已完成。
+
+后续重点可以继续补强真实模型 provider 配置、更多视觉策略、资产加载、性能监控和打包体积优化。

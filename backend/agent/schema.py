@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -18,7 +18,18 @@ class VisualModuleEnvelope(BaseModel):
     type: Literal["visual_module"]
     apiVersion: Literal["1"]
     moduleId: str = Field(min_length=1, max_length=128)
-    targetLayer: Literal["foreground"]
+    targetLayer: Literal["canvas"]
     duration: int = Field(ge=1, le=300)
     transitionSeconds: int = Field(ge=0, le=30)
     code: str = Field(min_length=1, max_length=12000)
+    source: str | None = None
+
+
+class AgentState(TypedDict):
+    summary: MusicWindowSummary
+    prompt: NotRequired[str]
+    raw_output: NotRequired[str]
+    envelope: NotRequired[VisualModuleEnvelope]
+    error: NotRequired[str]
+    recent_modules: NotRequired[list[str]]
+    metadata: NotRequired[dict[str, Any]]

@@ -1,6 +1,6 @@
 # Visual Module Contract v1
 
-MVP 中后端 agent 只能生成 `foreground` three.js 前景模块。前端 runtime 拥有 canvas、renderer、scene、camera 和 render loop。
+当前版本中后端 agent 生成的是整画布 `canvas` 视觉模块。前端 runtime 仍然拥有 canvas、renderer、scene、camera 和 render loop，但模块可以同时控制 p5 背景绘制和 three.js 前景对象。
 
 ## Envelope
 
@@ -9,7 +9,7 @@ MVP 中后端 agent 只能生成 `foreground` three.js 前景模块。前端 run
   "type": "visual_module",
   "apiVersion": "1",
   "moduleId": "bass-orb-001",
-  "targetLayer": "foreground",
+  "targetLayer": "canvas",
   "duration": 30,
   "transitionSeconds": 4,
   "code": "export function createVisualModule(api) { ... }"
@@ -22,6 +22,7 @@ MVP 中后端 agent 只能生成 `foreground` three.js 前景模块。前端 run
 export function createVisualModule(api) {
   return {
     init() {},
+    drawBackground(frame, bg) {},
     update(frame) {},
     dispose() {},
   }
@@ -35,4 +36,5 @@ export function createVisualModule(api) {
 - 模块不能启动自己的动画循环。
 - 模块不能发起网络请求。
 - 模块不能异步加载未知资源。
+- 模块不能依赖任何预设背景或默认视觉元素存在。
 - 校验失败必须拒绝模块，保留当前画面。

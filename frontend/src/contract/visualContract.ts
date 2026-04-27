@@ -2,10 +2,11 @@ export type VisualModuleEnvelope = {
   type: 'visual_module'
   apiVersion: '1'
   moduleId: string
-  targetLayer: 'foreground'
+  targetLayer: 'canvas'
   duration: number
   transitionSeconds: number
   code: string
+  source?: string | null
 }
 
 export type VisualFrame = {
@@ -24,5 +25,10 @@ export type VisualFrame = {
   transition: {
     in: number
     out: number
+  }
+  viewport: {
+    width: number
+    height: number
+    aspect: number
   }
 }
